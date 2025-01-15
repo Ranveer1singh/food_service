@@ -53,17 +53,17 @@ export const GetVandor = async (req: Request, res: Response, next: NextFunction)
         const vandors = await Vandor.find();
 
         if (vandors && vandors.length > 0) {
-             res.status(200).json(vandors); //  return 200 status with the data
+              res.status(200).json(vandors); //   200 status with the data
         }
 
         // If no vandors are found
-         res.status(404).json({
+          res.status(404).json({
             message: "No vandors found",
         });
     } catch (error) {
         // Handle any unexpected errors
         console.error("Error fetching vandors:", error);
-         res.status(500).json({
+          res.status(500).json({
             message: "An error occurred while fetching vandors",
             error: error.message || "Internal Server Error",
         });
@@ -94,3 +94,4 @@ export const GetVandorById =  async (req : Request, res : Response, next: NextFu
     next(error);
   }
 }
+

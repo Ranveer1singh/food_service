@@ -4,32 +4,44 @@ import { FindVandor } from "./AdminController";
 import { GenerateSignature, ValidatePassword } from "../utility";
 import { CreatFoodInput } from "../dto/Food.dto";
 import { Food } from "../models/Food.model";
-import { create } from "domain";
 import { Order } from "../models/Order.model";
-import { time } from "console";
 import { Offer } from "../models/Offer.model";
 
 export const VandorLogin = async (req: Request, res: Response, next: NextFunction) => {
-    const { email, password } = <VandorLoginInput>req.body;
-    const existingVandor = await FindVandor('', email);
-
-    if (existingVandor !== null) {
-        const validation = await ValidatePassword(password, existingVandor.password, existingVandor.salt)
-
-        if (validation) {
-            const signature = GenerateSignature({
-                _id: existingVandor.id,
-                name: existingVandor.name,
-                email: existingVandor.email,
-                foodType: existingVandor.foodType
-            })
-            res.json(signature)
-        } else {
-            res.status(400).json({
-                Message: "password incorrect"
-            })
+        const { email, password } = req.body as VandorLoginInput;
+      
+        try {
+          // Validate input
+          if (!email || !password) {
+             res.status(400).json({ message: 'Email and password are required' });
+          }
+      
+          // Check if the vendor exists
+          const existingVandor = await FindVandor('', email);
+      
+          if (!existingVandor) {
+             res.status(404).json({ message: 'Vendor not found' });
+          }
+      
+          // Validate password
+          const isPasswordValid = await ValidatePassword(password, existingVandor.password, existingVandor.salt);
+          if (!isPasswordValid) {
+             res.status(400).json({ message: 'Incorrect password' });
+          }
+      
+          // Generate JWT token
+          const token = GenerateSignature({
+            _id: existingVandor.id,
+            name: existingVandor.name,
+            email: existingVandor.email,
+            foodType: existingVandor.foodType,
+          });
+      
+          // Respond with the token
+           res.status(200).json({ token, message: 'Login successful' });
+        } catch (error) {
+          next(error); // Forward the error to the error handling middleware
         }
-    }
 }
 
 
