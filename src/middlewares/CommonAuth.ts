@@ -11,14 +11,14 @@ declare global {
     }
 }
 
-export const Authenticate = async (req: Request, res : Response ,next : NextFunction)=>{
-    const validate = await ValidateSignature(req);
+export const Authenticate = async (req: Request, res: Response, next: NextFunction) => {
+    const isValid = await ValidateSignature(req);
 
-    if (validate){
-        next() 
-    }else{
-        res.json({
-            message : "User not Authorized"
-        })
+    if (isValid) {
+        next();
+    } else {
+        res.status(401).json({
+            message: "User not authorized. Invalid or missing token.",
+        });
     }
-}
+};

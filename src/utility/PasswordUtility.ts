@@ -27,13 +27,28 @@ export const GenerateSignature = (payload : AuthPayload)=>{
 
 }
 
-export const ValidateSignature = async (req : Request) => {
-    const signature = req.get('Authorization');
+export const ValidateSignature = async (req: Request): Promise<boolean> => {
+    try {
+        const signature = req.get("Authorization"); // Get the Authorization header
+        // console.log("Authorization header:", signature)
 
-    if(signature){
-        const payload = await jwt.verify(signature.split(" " )[1], App_secret) as AuthPayload
+        if (!signature) {
+            console.error("Authorization header is missing");
+            return false;
+        }
 
-        req.user = payload;
+        const token = signature.split(" ")[1]; // Extract the token
+        if (!token) {
+            console.error("Token is missing in Authorization header");
+            return false;
+        }
+
+        const payload = await jwt.verify(token, App_secret) as AuthPayload; // Verify the token
+        req.user = payload; // Attach the payload to the request object
+
         return true;
+    } catch (error) {
+        console.error("Error verifying token:", error.message);
+        return false;
     }
-}
+};

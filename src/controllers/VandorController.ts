@@ -6,14 +6,16 @@ import { CreatFoodInput } from "../dto/Food.dto";
 import { Food } from "../models/Food.model";
 import { Order } from "../models/Order.model";
 import { Offer } from "../models/Offer.model";
+import { promises } from "dns";
 
-export const VandorLogin = async (req: Request, res: Response, next: NextFunction) => {
+export const VandorLogin = async (req: Request, res: Response, next: NextFunction) : Promise<void> => {
         const { email, password } = req.body as VandorLoginInput;
       
         try {
           // Validate input
           if (!email || !password) {
              res.status(400).json({ message: 'Email and password are required' });
+             return ;
           }
       
           // Check if the vendor exists
@@ -21,12 +23,14 @@ export const VandorLogin = async (req: Request, res: Response, next: NextFunctio
       
           if (!existingVandor) {
              res.status(404).json({ message: 'Vendor not found' });
+             return;
           }
       
           // Validate password
           const isPasswordValid = await ValidatePassword(password, existingVandor.password, existingVandor.salt);
           if (!isPasswordValid) {
              res.status(400).json({ message: 'Incorrect password' });
+             return;
           }
       
           // Generate JWT token
@@ -39,23 +43,41 @@ export const VandorLogin = async (req: Request, res: Response, next: NextFunctio
       
           // Respond with the token
            res.status(200).json({ token, message: 'Login successful' });
+           return;
         } catch (error) {
           next(error); // Forward the error to the error handling middleware
+          res.status(500).json({
+            message : "Internal server Error" + error
+          })
         }
 }
 
 
-export const GetVandorProfile = async (req: Request, res: Response, next: NextFunction) => {
-    const user = req.user;
+export const GetVandorProfile = async (req: Request, res: Response, next: NextFunction) : Promise<void> => {
+    try {
+        const user = req.user;
 
-    if (user) {
-        const existingUser = await FindVandor(user._id)
-        res.json(existingUser)
+        if (!user) {
+             res.status(400).json({ message: "User not found in request" });
+             return;
+        }
+
+        const existingUser = await FindVandor(user._id);
+
+        if (!existingUser) {
+             res.status(404).json({ message: "Vendor profile not found" });
+             return ;
+        }
+
+         res.status(200).json(existingUser);
+         return ;
+    } catch (error) {
+        console.error("Error fetching vendor profile:", error);
+         res.status(500).json({ message: "Internal server error" });
+         return;
     }
-    res.json({
-        message: "not found"
-    })
-}
+};
+
 
 export const UpdateVendorProfile = async (req: Request, res: Response, next: NextFunction) => {
 
