@@ -56,6 +56,8 @@ export const VandorLogin = async (req: Request, res: Response, next: NextFunctio
 export const GetVandorProfile = async (req: Request, res: Response, next: NextFunction) : Promise<void> => {
     try {
         const user = req.user;
+        console.log("User data" , user);
+        
 
         if (!user) {
              res.status(400).json({ message: "User not found in request" });
@@ -79,74 +81,112 @@ export const GetVandorProfile = async (req: Request, res: Response, next: NextFu
 };
 
 
-export const UpdateVendorProfile = async (req: Request, res: Response, next: NextFunction) => {
+export const UpdateVendorProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { name, foodType, address, phone } = req.body as EditVandorInput; 
+        const user = req.user;
 
-    const { name, foodType, address, phone } = <EditVandorInput>req.body
-    const user = req.user;
-
-    if (user) {
-        const existingUser = await FindVandor(user._id)
-
-        if (existingUser !== null) {
-            existingUser.foodType = foodType,
-                existingUser.name = name,
-                existingUser.address = address,
-                existingUser.phone = phone
-
-            const savedResult = await existingUser.save();
-            res.json(savedResult)
+        if (!user) {
+            res.status(401).json({ message: "Unauthorized: User not found in request" });
+            return; 
         }
-        res.json(existingUser)
-    }
-    res.json({
-        message: "not found"
-    })
-}
 
-export const UpdateVendorCoverImage = async (req: Request, res: Response, next: NextFunction) => {
-    const user = req.user;
+        const existingUser = await FindVandor(user._id);
 
-    if (user) {
-
-        const vandor = await FindVandor(user._id);
-
-        if (vandor !== null) {
-
-            const files = req.files as [Express.Multer.File];
-
-            const images = files.map((file: Express.Multer.File) => file.filename)
-            vandor.coverImage.push(...images);
-            const result = await vandor.save;
-            res.status(201).json({
-                message: "record created",
-                data: result
-            })
-
+        if (!existingUser) {
+            res.status(404).json({ message: "Vendor profile not found" });
+            return;
         }
+
+        // Update vendor properties
+        if (name) existingUser.name = name;
+        if (foodType) existingUser.foodType = foodType;
+        if (address) existingUser.address = address;
+        if (phone) existingUser.phone = phone;
+
+        // Save updated vendor
+        const savedResult = await existingUser.save();
+        res.status(200).json(savedResult);
+        return;
+    } catch (error) {
+        console.error("Error updating vendor profile:", error);
+        res.status(500).json({ message: "Internal server error", error: error.message });
+        return;
     }
-    res.json("something went worng with add food")
+};
 
-}
 
-export const UpdateVendorService = async (req: Request, res: Response, next: NextFunction) => {
+export const UpdateVendorCoverImage = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const user = req.user;
 
-    const user = req.user;
-
-    if (user) {
-        const existingUser = await FindVandor(user._id)
-
-        if (existingUser !== null) {
-            existingUser.serviceAvailable = !existingUser.serviceAvailable;
-
-            const savedResult = await existingUser.save();
-            res.json(savedResult)
+        if (!user) {
+            res.status(400).json({ message: "User not authenticated" });
+            return;
         }
-        res.json(existingUser)
+
+        const vendor = await FindVandor(user._id);
+
+        if (!vendor) {
+            res.status(404).json({ message: "Vendor not found" });
+            return;
+        }
+
+        const files = req.files as Express.Multer.File[];
+
+        if (!files || files.length === 0) {
+            res.status(400).json({ message: "No files uploaded" });
+            return;
+        }
+
+        // Map filenames and push to the vendor's coverImage array
+        const images = files.map((file: Express.Multer.File) => file.filename);
+        vendor.coverImage.push(...images);
+
+        const result = await vendor.save();
+
+        res.status(201).json({
+            message: "Cover images updated successfully",
+            data: result,
+        });
+    } catch (error) {
+        console.error("Error updating vendor cover image:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
-    res.json({
-        message: "not found"
-    })
-}
+};
+
+
+export const UpdateVendorService = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const user = req.user;
+
+        if (!user) {
+            res.status(400).json({ message: "User not authenticated" });
+            return;
+        }
+
+        const existingUser = await FindVandor(user._id);
+
+        if (!existingUser) {
+            res.status(404).json({ message: "Vendor not found" });
+            return;
+        }
+
+        // Toggle the serviceAvailable property
+        existingUser.serviceAvailable = !existingUser.serviceAvailable;
+
+        const savedResult = await existingUser.save();
+
+        res.status(200).json({
+            message: "Vendor service availability updated successfully",
+            vendor: savedResult
+        });
+    } catch (error) {
+        console.error("Error updating vendor service availability:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 
 export const AddFood = async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;

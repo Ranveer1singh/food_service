@@ -20,11 +20,10 @@ export interface VandorPayload {
 }
 
 export interface EditVandorInput {
-
- address : string,
-    phone : string,
-    name : string,
-    foodType : [string]
+    name?: string;
+    foodType?: [string]
+    address?: string;
+    phone?: string;
 }
 
 export interface CreateOfferInputs {
