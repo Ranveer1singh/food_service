@@ -104,79 +104,110 @@ export const CustomerLogin = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
-  const loginInputs = plainToClass(UserLoginInput, req.body);
-  const loginError = await validate(loginInputs, {
-    validationError: { target: true },
-  });
+): Promise<void> => {
+  try {
+    // Parse and validate login inputs
+    const loginInputs = plainToClass(UserLoginInput, req.body);
+    const validationErrors = await validate(loginInputs, {
+      validationError: { target: false },
+    });
 
-  if (loginError.length > 0) {
-    res.status(400).json(loginError);
-  }
+    if (validationErrors.length > 0) {
+      res.status(400).json({ errors: validationErrors });
+      return;
+    }
 
-  const { email, password } = loginInputs;
+    const { email, password } = loginInputs;
 
-  const customer = await Customer.findOne({ email });
+    // Find customer by email
+    const customer = await Customer.findOne({ email });
+    if (!customer) {
+      res.status(400).json({ message: "Invalid credentials" });
+      return;
+    }
 
-  if (customer) {
-    const validation = await ValidatePassword(
+    // Validate password
+    const isPasswordValid = await ValidatePassword(
       password,
       customer.password,
       customer.salt
     );
 
-    if (validation) {
-      // generate signature / token
-      const signature = GenerateSignature({
-        _id: customer._id.toString(),
-        email: customer.email,
-        verified: customer.verified,
-      });
-
-      res.status(200).json({
-        signature: signature,
-        verified: customer.verified,
-        email: customer.email,
-      });
+    if (!isPasswordValid) {
+      res.status(400).json({ message: "Invalid credentials" });
+      return;
     }
-  }
 
-  res.status(400).json({
-    message: "error in login",
-  });
+    // Generate token
+    const token = GenerateSignature({
+      _id: customer._id.toString(),
+      email: customer.email,
+      verified: customer.verified,
+    });
+
+    // Respond with token and customer info
+    res.status(200).json({
+      signature: token,
+      verified: customer.verified,
+      email: customer.email,
+    });
+  } catch (error) {
+    next(error); // Pass error to the error handling middleware
+  }
 };
+
 
 export const CustomerVerify = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
-  const { otp } = req.body;
-  const customer = req.user;
+): Promise<void> => {
+  try {
+    const { otp } = req.body;
+    const customer = req.user;
 
-  if (customer) {
-    const profile = await Customer.findById(customer._id);
-    if (profile) {
-      if (profile.otp === parseInt(otp) && profile.otp_expiry >= new Date()) {
-        profile.verified = true;
-        const updatedCustomerResponse = await profile.save();
-
-        const signature = GenerateSignature({
-          _id: updatedCustomerResponse._id.toString(),
-          email: updatedCustomerResponse.email,
-          verified: updatedCustomerResponse.verified,
-        });
-        res.status(200).json({
-          signature: signature,
-          verified: updatedCustomerResponse.verified,
-          email: updatedCustomerResponse.verified,
-        });
-      }
+    if (!customer) {
+      res.status(400).json({ message: "Customer not found" });
+      return;
     }
+
+    const profile = await Customer.findById(customer._id);
+    if (!profile) {
+      res.status(404).json({ message: "Customer profile not found" });
+      return;
+    }
+
+    // Validate OTP and expiry
+    const isOtpValid =
+      profile.otp === parseInt(otp, 10) && profile.otp_expiry >= new Date();
+
+    if (!isOtpValid) {
+      res.status(400).json({ message: "Invalid or expired OTP" });
+      return;
+    }
+
+    // Mark customer as verified and save the profile
+    profile.verified = true;
+    profile.otp = undefined; // Optionally clear the OTP
+    profile.otp_expiry = undefined; // Optionally clear the OTP expiry
+    const updatedCustomer = await profile.save();
+
+    // Generate a new token
+    const token = GenerateSignature({
+      _id: updatedCustomer._id.toString(),
+      email: updatedCustomer.email,
+      verified: updatedCustomer.verified,
+    });
+
+    // Send response
+    res.status(200).json({
+      signature: token,
+      verified: updatedCustomer.verified,
+      email: updatedCustomer.email,
+    });
+  } catch (error) {
+    next(error); // Pass error to the error-handling middleware
   }
-  res.status(400).json({
-    message: "customer verifide controller error",
-  });
 };
 
 export const RequestOtp = async (
