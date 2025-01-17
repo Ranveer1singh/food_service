@@ -7,7 +7,7 @@ export class CreateCustmerInput {
     @IsEmail()
     email : string;
 
-    @Length(7,12)
+    @Length(7,14)
     phone : string;
 
     @Length(6,12)

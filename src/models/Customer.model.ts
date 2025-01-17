@@ -2,7 +2,7 @@ import mongoose, { Schema } from "mongoose"
 import { Order, OrderDoc } from "./Order.model";
 
 interface CustomerDoc extends Document {
-    name : string,
+    // name : string,
     email:string,
     password : string,
     salt : string,
@@ -20,7 +20,7 @@ interface CustomerDoc extends Document {
 }
 
 const CustomerSchema  = new Schema({
-    name : {type : String, required : true},
+    email : {type : String, required : true},
     password : {type : String, required : true},
     salt : {type : String, required : true},
     firstName : {type : String},

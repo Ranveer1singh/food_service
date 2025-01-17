@@ -19,75 +19,87 @@ import {
 import { Customer } from "../models/Customer.model";
 import { Food } from "../models/Food.model";
 import { Order } from "../models/Order.model";
-import { profileEnd } from "console";
-import { Message } from "twilio/lib/twiml/MessagingResponse";
 
 export const CustomerSignUp = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
-  const customerInputs = plainToClass(CreateCustmerInput, req.body);
-  const inputErrors = await validate(customerInputs, {
-    validationError: { target: true },
-  });
-
-  if (inputErrors.length > 0) {
-    res.status(400).json(inputErrors);
-  }
-
-  const { email, phone, password } = customerInputs;
-  const salt = await GenerateSalt();
-  const UserPassword = await GeneratePassword(password, salt);
-
-  const { otp, expiry } = GenerateOtp();
-  const existCustomer = await Customer.findOne({ email: email });
-
-  if (existCustomer) {
-    res.status(409).json({
-      message: "Customer is already exist",
-    });
-  }
-
-  const result = await Customer.create({
-    email,
-    password: UserPassword,
-    phone: phone,
-    salt: salt,
-    otp: otp,
-    otp_expiry: expiry,
-    firstName: "",
-    lastName: "",
-    address: "",
-    verified: false,
-    lat: 0,
-    lng: 0,
-    orders: []
-  });
-
-  if (result) {
-    // send Otp
-    await onRequestOtp(otp, phone);
-
-    // generate signature
-    const signature = GenerateSignature({
-      _id: result._id.toString(),
-      email: result.email,
-      verified: result.verified,
+): Promise<void> => {
+  try {
+    // Transform and validate input
+    const customerInputs = plainToClass(CreateCustmerInput, req.body);
+    const inputErrors = await validate(customerInputs, {
+      validationError: { target: false },
     });
 
-    //  send respose
-    res.status(201).json({
-      signature,
-      verified: result.verified,
-      email: result.email,
-    });
-  }
+    if (inputErrors.length > 0) {
+      res.status(400).json({ errors: inputErrors });
+      return;
+    }
 
-  res.status(400).json({
-    message: "customer signup controller error",
-  });
+    const { email, phone, password } = customerInputs;
+    // Generate secure password and OTP
+    const salt = await GenerateSalt();
+    const hashedPassword = await GeneratePassword(password, salt);
+    const { otp, expiry } = GenerateOtp();
+
+    // Check if the customer already exists
+    const existingCustomer = await Customer.findOne({ email });
+    if (existingCustomer) {
+      res.status(409).json({ message: "Customer already exists" });
+      return;
+    }
+
+
+
+    // Create new customer
+    const newCustomer = await Customer.create({
+      email,
+      password: hashedPassword,
+      phone,
+      salt,
+      otp,
+      otp_expiry: expiry,
+      firstName: "",
+      lastName: "",
+      address: "",
+      verified: false,
+      lat: 0,
+      lng: 0,
+      orders: [],
+    });
+
+    if (newCustomer) {
+      // Send OTP
+      await onRequestOtp(otp, phone);
+
+      // Generate a signature for authentication
+      const signature = GenerateSignature({
+        _id: newCustomer._id.toString(),
+        email: newCustomer.email,
+        verified: newCustomer.verified,
+      });
+
+      // Respond with success
+      res.status(201).json({
+        signature,
+        verified: newCustomer.verified,
+        email: newCustomer.email,
+      });
+      return;
+    }
+    res.status(500).json({ message: "Failed to create customer" });
+    return;
+
+  } catch (error) {
+    next(error); // Pass errors to the global error handler
+    res.status(500).json({
+      message: error.message,
+    })
+    return
+  }
 };
+
 export const CustomerLogin = async (
   req: Request,
   res: Response,
@@ -133,6 +145,7 @@ export const CustomerLogin = async (
     message: "error in login",
   });
 };
+
 export const CustomerVerify = async (
   req: Request,
   res: Response,
@@ -165,6 +178,7 @@ export const CustomerVerify = async (
     message: "customer verifide controller error",
   });
 };
+
 export const RequestOtp = async (
   req: Request,
   res: Response,
@@ -192,6 +206,7 @@ export const RequestOtp = async (
     message: "Error while send Otp",
   });
 };
+
 export const GetCustomerProfile = async (
   req: Request,
   res: Response,
@@ -210,6 +225,7 @@ export const GetCustomerProfile = async (
     message: 'customer profile fetch  controller not working'
   })
 };
+
 export const EditCustomerProfile = async (
   req: Request,
   res: Response,
@@ -351,35 +367,35 @@ export const AddToCart = async (req: Request, res: Response, next: NextFunction)
 
   const customer = req.user;
 
-  if(customer){
+  if (customer) {
     const profile = await Customer.findById(customer._id);
     let cartItems = Array();
 
-    const {_id, unit} = <CartItem>req.body;
+    const { _id, unit } = <CartItem>req.body;
 
     const food = await Food.findById(_id);
 
-    if(food){
-      if(profile !== null){
+    if (food) {
+      if (profile !== null) {
         cartItems = profile.cart;
-        if(cartItems.length > 0){
-          let existfoodItems = cartItems.filter((item)=> item.food._id.toString() === _id);
-          if(existfoodItems.length > 0){
+        if (cartItems.length > 0) {
+          let existfoodItems = cartItems.filter((item) => item.food._id.toString() === _id);
+          if (existfoodItems.length > 0) {
             const index = cartItems.indexOf(existfoodItems[0])
-            if(unit > 0){
-              cartItems[index] = {food, unit};
+            if (unit > 0) {
+              cartItems[index] = { food, unit };
 
-            }else{
+            } else {
               cartItems.splice(index, 1)
             }
-          }else{
-            cartItems.push({food, unit})
+          } else {
+            cartItems.push({ food, unit })
           }
-        }else{
-          cartItems.push({food, unit})
+        } else {
+          cartItems.push({ food, unit })
         }
 
-        if(cartItems){
+        if (cartItems) {
           profile.cart = cartItems as any;
           const cartResult = await profile.save();
           res.status(200).json(cartResult.cart)
@@ -393,38 +409,38 @@ export const GetCart = async (req: Request, res: Response, next: NextFunction) =
 
   const customer = req.user;
 
-  if (customer){
+  if (customer) {
     const profile = await Customer.findById(customer._id);
 
-    if(profile){
+    if (profile) {
       res.status(200).json(profile.cart);
 
     }
 
   }
   res.status(400).json({
-    Message : 'cart is empty!'
+    Message: 'cart is empty!'
   })
 }
 
 export const DeleteCart = async (req: Request, res: Response, next: NextFunction) => {
 
-   
+
   const customer = req.user;
 
-  if(customer){
+  if (customer) {
 
-      const profile = await Customer.findById(customer._id).populate('cart.food').exec();
+    const profile = await Customer.findById(customer._id).populate('cart.food').exec();
 
-      if(profile != null){
-          profile.cart = [] as any;
-          const cartResult = await profile.save();
+    if (profile != null) {
+      profile.cart = [] as any;
+      const cartResult = await profile.save();
 
-          return res.status(200).json(cartResult);
-      }
+      return res.status(200).json(cartResult);
+    }
 
   }
 
-  return res.status(400).json({message: 'cart is Already Empty!'})
+  return res.status(400).json({ message: 'cart is Already Empty!' })
 
 }

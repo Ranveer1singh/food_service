@@ -52,7 +52,7 @@ export const CreateVandor = async (req: Request, res: Response, next: NextFuncti
         })
     }
 };
-
+// login
 export const GetVandor = async (req: Request, res: Response, next: NextFunction) : Promise<void>=> {
     try {
         const vandors = await Vandor.find();
@@ -77,6 +77,7 @@ export const GetVandor = async (req: Request, res: Response, next: NextFunction)
         return ;
     }
 };
+//vandor get id
 export const GetVandorById =  async (req : Request, res : Response, next: NextFunction) : Promise<void>=>{
 
     const vandorId = req.params.id;
