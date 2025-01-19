@@ -214,182 +214,255 @@ export const RequestOtp = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
-  const customer = req.user;
+): Promise<void> => {
+  try {
+    const customer = req.user;
 
-  if (customer) {
-    const profile = await Customer.findById(customer._id);
-    if (profile) {
-      const { otp, expiry } = GenerateOtp();
-
-      profile.otp = otp;
-      profile.otp_expiry = expiry;
-
-      await profile.save();
-      await onRequestOtp(otp, profile.phone);
-
-      res.status(200).json({
-        message: "OTP is sent to your register phone number ",
-      });
+    if (!customer) {
+      res.status(401).json({ message: "Unauthorized: Customer not found." });
+      return;
     }
+
+    const profile = await Customer.findById(customer._id);
+
+    if (!profile) {
+      res.status(404).json({ message: "Customer profile not found." });
+      return;
+    }
+
+    const { otp, expiry } = GenerateOtp();
+
+    profile.otp = otp;
+    profile.otp_expiry = expiry;
+
+    await profile.save();
+    await onRequestOtp(otp, profile.phone);
+
+    res.status(200).json({
+      message: "OTP has been sent to your registered phone number.",
+    });
+  } catch (error) {
+    next(error); // Pass the error to the centralized error handler
   }
-  res.status(400).json({
-    message: "Error while send Otp",
-  });
 };
 
 export const GetCustomerProfile = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
-  const customer = req.user;
+): Promise<void> => {
+  try {
+    const customer = req.user;
 
-  if (customer) {
+    if (!customer) {
+      res.status(401).json({ message: "Unauthorized: Customer not found." });
+      return;
+    }
+
     const profile = await Customer.findById(customer._id);
 
-    if (profile) {
-      res.status(200).json(profile)
+    if (!profile) {
+      res.status(404).json({ message: "Customer profile not found." });
+      return;
     }
+
+    res.status(200).json(profile);
+  } catch (error) {
+    next(error); // Pass the error to the centralized error handler
   }
-  res.status(400).json({
-    message: 'customer profile fetch  controller not working'
-  })
 };
+
+
 
 export const EditCustomerProfile = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
-  const customer = req.user;
-  const profileInputs = plainToClass(EditCustomerProfileInputs, req.body);
-  const profileError = await validate(profileInputs, {
-    validationError: { target: true },
-  });
-  if (profileError.length > 0) {
-    res.status(400).json({
-      message: " error in get customer profile",
-      profileError,
-    });
-  }
-  const { firstName, lastName, address } = profileInputs
+): Promise<void> => {
+  try {
+    const customer = req.user;
+    const profileInputs = plainToClass(EditCustomerProfileInputs, req.body);
 
-  if (customer) {
+    const profileError = await validate(profileInputs, {
+      validationError: { target: true },
+    });
+
+    if (profileError.length > 0) {
+      res.status(400).json({
+        message: "Validation error in profile inputs.",
+        errors: profileError,
+      });
+      return;
+    }
+
+    const { firstName, lastName, address } = profileInputs;
+
+    if (!customer) {
+      res.status(401).json({ message: "Unauthorized: Customer not found." });
+      return;
+    }
+
     const profile = await Customer.findById(customer._id);
 
-    if (profile) {
-      profile.firstName = firstName;
-      profile.lastName = lastName;
-      profile.address = address;
-
-      const result = await profile.save();
-      res.status(200).json({
-        result
-      })
+    if (!profile) {
+      res.status(404).json({ message: "Customer profile not found." });
+      return;
     }
+
+    profile.firstName = firstName;
+    profile.lastName = lastName;
+    profile.address = address;
+
+    const result = await profile.save();
+
+    res.status(200).json({
+      message: "Customer profile updated successfully.",
+      result,
+    });
+  } catch (error) {
+    next(error); // Pass the error to the centralized error handler
   }
-  res.status(400).json({
-    message: 'customer profile update controller not working'
-  })
 };
+
 
 export const CreateOrder = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
-  const customer = req.user;
+): Promise<void> => {
+  try {
+    const customer = req.user;
 
-  if (customer) {
-    // Create order ID
+    if (!customer) {
+      res.status(401).json({ message: "Unauthorized: Customer not found." });
+      return;
+    }
+
     const orderId = `${Math.floor(Math.random() * 89999) + 1000}`;
     const profile = await Customer.findById(customer._id);
 
     if (!profile) {
-      res.status(404).json({ message: "Customer profile not found" });
+      res.status(404).json({ message: "Customer profile not found." });
+      return;
     }
 
-    let cart = <[OrderInput]>req.body;
-    let cartItems = Array();
-    let netAmount = 0.0;
-    let vendorId;
-    // Calculate amount
-    const foods = await Food.find()
-      .where("_id")
-      .in(cart.map((item) => item._id))
-      .exec();
-    foods.map((food) => {
-      cart.map(({ _id, unit }) => {
-        if (food._id == _id) {
-          vendorId = food.vandorId;
-          netAmount += food.price * unit;
-          cartItems.push({ food, unit });
-        }
-      });
+    const cart: [OrderInput] = req.body;
+    if (!cart || cart.length <= 0) {
+      res.status(400).json({ message: "Cart is empty." });
+      return;
+    }
+
+    let cartItems: any[] = [];
+    let netAmount = 0;
+
+    const foodIds = cart.map((item) => item._id);
+    const foods = await Food.find().where("_id").in(foodIds).exec();
+
+    if (!foods || foods.length === 0) {
+      res.status(404).json({ message: "No food items found." });
+      return;
+    }
+
+    foods.forEach((food) => {
+      const cartItem = cart.find((item) => item._id === food._id.toString());
+      if (cartItem) {
+        const { unit } = cartItem;
+        netAmount += food.price * unit;
+        cartItems.push({ food, unit });
+      }
     });
 
-    // Create order with description
-    if (cartItems.length > 0) {
-      const currentOrder = await Order.create({
-        orderId: orderId,
-        items: cartItems,
-        totalAmount: netAmount,
-        orderDate: new Date(),
-        paidThrough: "COD",
-        paymentResponse: "",
-        orderStatus: "waiting",
-      });
-
-      if (currentOrder) {
-        profile.orders.push(currentOrder);
-        await profile.save();
-
-        res.status(201).json(currentOrder);
-      }
+    if (cartItems.length === 0) {
+      res.status(400).json({ message: "No valid items in cart." });
+      return;
     }
-    res.status(400).json({ message: "Cart is empty" });
-  }
 
-  res.status(401).json({ message: "Unauthorized" });
+    const currentOrder = await Order.create({
+      orderId,
+      items: cartItems,
+      totalAmount: netAmount,
+      orderDate: new Date(),
+      paidThrough: "COD",
+      paymentResponse: "",
+      orderStatus: "waiting",
+    });
+
+    profile.orders.push(currentOrder);
+    await profile.save();
+
+    res.status(201).json({
+      message: "Order created successfully.",
+      order: currentOrder,
+    });
+  } catch (error) {
+    next(error); // Pass the error to the centralized error handler
+  }
 };
 
-export const GetOrders = async (req: Request, res: Response, next: NextFunction) => {
+export const GetOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const customer = req.user;
 
-  const customer = req.user;
-
-  if (customer) {
-
+    if (!customer) {
+      res.status(401).json({ message: "Unauthorized: Customer not found." });
+      return;
+    }
 
     const profile = await Customer.findById(customer._id).populate("orders");
-    if (profile) {
-      res.status(200).json(profile.orders);
+
+    if (!profile) {
+      res.status(404).json({ message: "Customer profile not found." });
+      return;
     }
 
-  }
-
-  res.status(400).json({ msg: 'Orders not found' });
-}
-
-
-export const GetOrderById = async (req: Request, res: Response, next: NextFunction) => {
-
-  const orderId = req.params.id;
-
-
-  if (orderId) {
-
-
-    const order = await Customer.findById(orderId).populate("items.food");
-
-    if (order) {
-      res.status(200).json(order);
+    if (!profile.orders || profile.orders.length <=0) {
+      res.status(404).json({ message: "No orders found for this customer." });
+      return;
     }
 
+    res.status(200).json({
+      message: "Orders retrieved successfully.",
+      orders: profile.orders,
+    });
+  } catch (error) {
+    next(error);
   }
+};
 
-  res.status(400).json({ msg: 'Order not found' });
-}
+
+export const GetOrderById = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const orderId = req.params.id;
+
+    if (!orderId) {
+      res.status(400).json({ message: "Order ID is required." });
+      return;
+    }
+
+    const order = await Order.findById(orderId).populate("items.food");
+
+    if (!order) {
+      res.status(404).json({ message: "Order not found." });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Order retrieved successfully.",
+      order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 
 /*--------- Cart Section--------*/
