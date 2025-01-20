@@ -466,85 +466,103 @@ export const GetOrderById = async (
 
 
 /*--------- Cart Section--------*/
-export const AddToCart = async (req: Request, res: Response, next: NextFunction) => {
+export const AddToCart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const customer = req.user;
 
+    if (!customer) {
+      res.status(401).json({ message: "Unauthorized access" });
+      return;
+    }
 
-  const customer = req.user;
-
-  if (customer) {
     const profile = await Customer.findById(customer._id);
-    let cartItems = Array();
+    if (!profile) {
+      res.status(404).json({ message: "Customer profile not found" });
+      return;
+    }
 
-    const { _id, unit } = <CartItem>req.body;
-
+    const { _id, unit } = req.body as CartItem;
     const food = await Food.findById(_id);
 
-    if (food) {
-      if (profile !== null) {
-        cartItems = profile.cart;
-        if (cartItems.length > 0) {
-          let existfoodItems = cartItems.filter((item) => item.food._id.toString() === _id);
-          if (existfoodItems.length > 0) {
-            const index = cartItems.indexOf(existfoodItems[0])
-            if (unit > 0) {
-              cartItems[index] = { food, unit };
-
-            } else {
-              cartItems.splice(index, 1)
-            }
-          } else {
-            cartItems.push({ food, unit })
-          }
-        } else {
-          cartItems.push({ food, unit })
-        }
-
-        if (cartItems) {
-          profile.cart = cartItems as any;
-          const cartResult = await profile.save();
-          res.status(200).json(cartResult.cart)
-        }
-      }
+    if (!food) {
+      res.status(404).json({ message: "Food item not found" });
+      return;
     }
+
+    let cartItems = profile.cart ;
+    const existingItemIndex = cartItems.findIndex((item) => item.food._id.toString() === _id);
+
+    if (existingItemIndex >= 0) {
+      if (unit > 0) {
+        cartItems[existingItemIndex].unit = unit;
+      } else {
+        cartItems.splice(existingItemIndex, 1); // Remove item if unit is 0
+      }
+    } else if (unit > 0) {
+      cartItems.push({ food, unit });
+    }
+
+    profile.cart = cartItems as any;
+    await profile.save();
+
+    res.status(200).json(profile.cart);
+  } catch (error) {
+    next(error); // Pass errors to the global error handler
   }
-}
+};
 
-export const GetCart = async (req: Request, res: Response, next: NextFunction) => {
+export const GetCart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const customer = req.user;
 
-  const customer = req.user;
+    if (!customer) {
+      res.status(401).json({ message: "Unauthorized access" });
+      return;
+    }
 
-  if (customer) {
     const profile = await Customer.findById(customer._id);
 
-    if (profile) {
-      res.status(200).json(profile.cart);
-
+    if (!profile) {
+      res.status(404).json({ message: "Customer profile not found" });
+      return;
     }
 
+    if (profile.cart && profile.cart.length > 0) {
+      res.status(200).json(profile.cart);
+    } else {
+      res.status(200).json({ message: "Cart is empty!" });
+    }
+  } catch (error) {
+    next(error); // Pass errors to the global error handler
   }
-  res.status(400).json({
-    Message: 'cart is empty!'
-  })
-}
+};
 
-export const DeleteCart = async (req: Request, res: Response, next: NextFunction) => {
+export const DeleteCart = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const customer = req.user;
 
-
-  const customer = req.user;
-
-  if (customer) {
+    if (!customer) {
+      res.status(401).json({ message: "Unauthorized access" });
+      return;
+    }
 
     const profile = await Customer.findById(customer._id).populate('cart.food').exec();
 
-    if (profile != null) {
-      profile.cart = [] as any;
-      const cartResult = await profile.save();
-
-      return res.status(200).json(cartResult);
+    if (!profile) {
+      res.status(404).json({ message: "Customer profile not found" });
+      return;
     }
 
+    if (profile.cart.length <= 0) {
+      res.status(200).json({ message: "Cart is already empty!" });
+      return;
+    }
+
+    profile.cart = [] as any;
+    await profile.save();
+
+    res.status(200).json({ message: "Cart has been cleared successfully." });
+  } catch (error) {
+    next(error); // Pass any unexpected errors to the global error handler
   }
-
-  return res.status(400).json({ message: 'cart is Already Empty!' })
-
-}
+};
